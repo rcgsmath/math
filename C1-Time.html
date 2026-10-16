@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>現在幾點？</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tone.js for sound effects -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <!-- Icon library -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <!-- Google Fonts for cute typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;900&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Nunito', sans-serif;
+            background-color: #fdf2f8; /* pink-50 */
+            background-image: radial-gradient(#fbcfe8 2px, transparent 2px);
+            background-size: 30px 30px;
+            touch-action: manipulation; /* Prevent double-tap zoom on mobile */
+            overflow-x: hidden;
+        }
+
+        /* Heartbeat Animation for the Reward */
+        @keyframes popInAndBeat {
+            0% { transform: scale(0); opacity: 0; }
+            40% { transform: scale(1.2); opacity: 1; }
+            60% { transform: scale(1); opacity: 1; }
+            80% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        .big-heart-container {
+            animation: popInAndBeat 1s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        .floating-element {
+            animation: float 3s ease-in-out infinite;
+        }
+
+        /* Cute Button Press Effect */
+        .btn-cute {
+            transition: all 0.1s ease;
+            box-shadow: 0 6px 0 rgba(0,0,0,0.15);
+        }
+        .btn-cute:active:not(:disabled) {
+            transform: translateY(6px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.15);
+        }
+        .btn-cute:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: translateY(6px);
+            box-shadow: 0 0 0 rgba(0,0,0,0.15);
+        }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+
+    <!-- Root element for React app -->
+    <div id="root" class="w-full max-w-lg"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- Helper Functions ---
+        // Generate random time based on mode
+        const generateRandomTime = (mode = 'mixed') => {
+            const hour = Math.floor(Math.random() * 12) + 1;
+            let minute = 0;
+            if (mode === 'hour') minute = 0;
+            else if (mode === 'half') minute = 30;
+            else minute = Math.random() > 0.5 ? 30 : 0;
+            return { hour, minute };
+        };
+
+        // Format number to 2 digits (e.g., 0 -> "00")
+        const formatNumber = (num) => num.toString().padStart(2, '0');
+
+        // --- Component: Analog Clock ---
+        const AnalogClock = ({ hour, minute, showNumbers }) => {
+            // Calculate angles for hands
+            const hourAngle = (hour % 12) * 30 + (minute * 0.5);
+            const minuteAngle = minute * 6;
+
+            return (
+                // 調整時鐘在手機端佔比約 80vw
+                <div className="relative w-[80vw] h-[80vw] max-w-[280px] max-h-[280px] sm:max-w-[320px] sm:max-h-[320px] mx-auto mb-6 floating-element bg-white rounded-full border-8 border-pink-400 shadow-xl flex items-center justify-center">
+                    <svg viewBox="0 0 200 200" className="w-full h-full drop-shadow-md">
+                        {/* Clock Face Inner Circle */}
+                        <circle cx="100" cy="100" r="90" fill="#fff" />
+                        
+                        {/* Numbers */}
+                        {Array.from({ length: 12 }).map((_, i) => {
+                            const num = i + 1;
+                            const isMajor = num % 3 === 0; // 12, 3, 6, 9
+                            
+                            // 如果是純刻度模式，且不是 12, 3, 6, 9，則不顯示數字
+                            if (!showNumbers && !isMajor) return null;
+
+                            const angle = (num * 30 - 90) * (Math.PI / 180);
+                            const x = 100 + 72 * Math.cos(angle); // 稍微往內縮，留空間給刻度
+                            const y = 100 + 72 * Math.sin(angle);
+                            return (
+                                <text key={`num-${num}`} x={x} y={y} fontSize="22" fill={isMajor ? "#475569" : "#64748b"} textAnchor="middle" dominantBaseline="middle" fontWeight="black">
+                                    {num}
+                                </text>
+                            );
+                        })}
+
+                        {/* Tick marks */}
+                        {Array.from({ length: 12 }).map((_, i) => {
+                            const num = i === 0 ? 12 : i;
+                            const isMajor = i % 3 === 0;
+                            // 如果該位置有顯示數字，則隱藏刻度避免重疊
+                            const hideTick = showNumbers || isMajor;
+                            
+                            return (
+                                <line 
+                                    key={`tick-${i}`} 
+                                    x1="100" y1="12" x2="100" y2="20" 
+                                    stroke={hideTick ? "transparent" : "#cbd5e1"} 
+                                    strokeWidth="5" 
+                                    strokeLinecap="round"
+                                    transform={`rotate(${i * 30} 100 100)`} 
+                                />
+                            );
+                        })}
+
+                        {/* Minute Hand (Blue, Long) */}
+                        <line 
+                            x1="100" y1="100" x2="100" y2="25" 
+                            stroke="#60A5FA" 
+                            strokeWidth="6" 
+                            strokeLinecap="round" 
+                            transform={`rotate(${minuteAngle} 100 100)`} 
+                        />
+                        
+                        {/* Hour Hand (Pink, Short) */}
+                        <line 
+                            x1="100" y1="100" x2="100" y2="45" 
+                            stroke="#F472B6" 
+                            strokeWidth="8" 
+                            strokeLinecap="round" 
+                            transform={`rotate(${hourAngle} 100 100)`} 
+                        />
+                        
+                        {/* Center Dot */}
+                        <circle cx="100" cy="100" r="8" fill="#FBBF24" />
+                        <circle cx="100" cy="100" r="4" fill="#fff" />
+                    </svg>
+                </div>
+            );
+        };
+
+        // --- Main App Component ---
+        const App = () => {
+            // 從網址讀取預設參數
+            const params = new URLSearchParams(window.location.search);
+            
+            const initialMode = (() => {
+                const urlMode = params.get('mode');
+                return ['hour', 'half', 'mixed'].includes(urlMode) ? urlMode : 'mixed';
+            })();
+
+            const initialLang = (() => {
+                const urlLang = params.get('lang');
+                return ['zh', 'en'].includes(urlLang) ? urlLang : 'zh';
+            })();
+
+            const [lang, setLang] = useState(initialLang); // 使用網址參數設定預設語言
+            const [mode, setMode] = useState(initialMode); // 使用網址參數設定預設模式
+            const [targetTime, setTargetTime] = useState(generateRandomTime(initialMode)); // 根據預設模式產生第一題
+            const [inputTime, setInputTime] = useState({ hour: "12", minute: "00" });
+            const [isCorrect, setIsCorrect] = useState(false);
+            const [streak, setStreak] = useState(0);
+            const [showReward, setShowReward] = useState(false);
+            const [isPlayingAudio, setIsPlayingAudio] = useState(false);
+            const [showNumbers, setShowNumbers] = useState(true);
+            const [errorMsg, setErrorMsg] = useState("");
+
+            // UI Translations
+            const t = {
+                zh: {
+                    title: "現在幾點？",
+                    modeHour: "時正",
+                    modeHalf: "時半",
+                    modeMixed: "混合",
+                    clockNum: "顯示數字",
+                    clockTick: "顯示刻度",
+                    streak: "連勝",
+                    hour: "時",
+                    minute: "分",
+                    checkBtn: "確認答案",
+                    nextBtn: "下一題",
+                    wrong: "差一點點喔！再試試看！",
+                    awesome: "太棒了！",
+                    highFive: "Give me five! (擊掌)",
+                    combo: "連續答對 5 題",
+                    continue: "(點擊畫面繼續)"
+                },
+                en: {
+                    title: "What time is it?",
+                    modeHour: "O'clock",
+                    modeHalf: "Half Past",
+                    modeMixed: "Mixed",
+                    clockNum: "Numbers",
+                    clockTick: "Ticks",
+                    streak: "Streak",
+                    hour: "Hour",
+                    minute: "Minute",
+                    checkBtn: "Check Answer",
+                    nextBtn: "Next",
+                    wrong: "Almost there! Try again!",
+                    awesome: "Awesome!",
+                    highFive: "High Five!",
+                    combo: "5 in a row!",
+                    continue: "(Tap to continue)"
+                }
+            };
+
+            // Audio phrase mappings
+            const cantoHourWords = {
+                1: '一點', 2: '兩點', 3: '三點', 4: '四點', 5: '五點', 6: '六點',
+                7: '七點', 8: '八點', 9: '九點', 10: '十點', 11: '十一點', 12: '十二點'
+            };
+            const engHourWords = {
+                1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five', 6: 'six',
+                7: 'seven', 8: 'eight', 9: 'nine', 10: 'ten', 11: 'eleven', 12: 'twelve'
+            };
+
+            // Tone.js 音效處理
+            const playSound = (type) => {
+                if (typeof Tone !== 'undefined') {
+                    Tone.start();
+                    const synth = new Tone.Synth().toDestination();
+                    if (type === 'correct') {
+                        synth.triggerAttackRelease("C5", "8n");
+                    } else if (type === 'wrong') {
+                        synth.triggerAttackRelease("F2", "8n");
+                    } else if (type === 'win') {
+                        const polySynth = new Tone.PolySynth(Tone.Synth).toDestination();
+                        polySynth.triggerAttackRelease(["C4", "E4", "G4", "C5"], "2n");
+                    }
+                }
+            };
+
+            const playTimeAudio = (hour, minute, currentLang) => {
+                if (!window.speechSynthesis) {
+                    console.warn("Speech Synthesis not supported in this browser.");
+                    return;
+                }
+
+                setIsPlayingAudio(true);
+                const synth = window.speechSynthesis;
+                synth.cancel(); // Cancel any ongoing speech
+
+                // Construct Phrases
+                const cantoText = minute === 0 ? `而家係${cantoHourWords[hour]}正` : `而家係${cantoHourWords[hour]}半`;
+                const engText = minute === 0 ? `It's ${engHourWords[hour]} o'clock` : `It's half past ${engHourWords[hour]}`;
+
+                let utterance;
+                
+                // 根據當前選擇的語言發音
+                if (currentLang === 'zh') {
+                    utterance = new SpeechSynthesisUtterance(cantoText);
+                    utterance.lang = 'zh-HK';
+                    utterance.rate = 0.8; // 廣東話放慢為 0.8X
+                } else {
+                    utterance = new SpeechSynthesisUtterance(engText);
+                    utterance.lang = 'en-US';
+                    utterance.rate = 0.5; // 英文大幅放慢為 0.5X
+                }
+
+                utterance.onend = () => { setIsPlayingAudio(false); };
+                synth.speak(utterance);
+            };
+
+            const handleModeChange = (newMode) => {
+                setMode(newMode);
+                const newTime = generateRandomTime(newMode);
+                setTargetTime(newTime);
+                setInputTime({ hour: "12", minute: "00" });
+                setIsCorrect(false);
+                setShowReward(false);
+            };
+
+            const checkAnswer = () => {
+                const h = parseInt(inputTime.hour, 10);
+                const m = parseInt(inputTime.minute, 10);
+                if (h === targetTime.hour && m === targetTime.minute) {
+                    setIsCorrect(true);
+                    setErrorMsg("");
+                    playSound('correct');
+                    playTimeAudio(targetTime.hour, targetTime.minute, lang); // 傳入當前語言
+                    
+                    const newStreak = streak + 1;
+                    if (newStreak >= 5) {
+                        setTimeout(() => playSound('win'), 500); // 擊掌和弦音效
+                        setShowReward(true);
+                        setStreak(0);
+                    } else {
+                        setStreak(newStreak);
+                    }
+                } else {
+                    playSound('wrong'); // 答錯低沉音效
+                    setErrorMsg(t[lang].wrong);
+                    setTimeout(() => setErrorMsg(""), 2000); // 2秒後恢復按鈕狀態
+                }
+            };
+
+            const handleNextQuestion = () => {
+                setTargetTime(generateRandomTime(mode));
+                setInputTime({ hour: "12", minute: "00" });
+                setIsCorrect(false);
+                setShowReward(false);
+                window.speechSynthesis?.cancel();
+                setIsPlayingAudio(false);
+            };
+
+            return (
+                <div className="relative bg-white rounded-3xl p-5 sm:p-8 shadow-[0_10px_40px_-15px_rgba(0,0,0,0.1)] border-4 border-yellow-300 w-full overflow-hidden">
+                    
+                    {/* Top Row: Language, Modes, Settings */}
+                    <div className="flex flex-col sm:flex-row justify-between items-center gap-4 sm:gap-2 mb-6 w-full">
+                        
+                        {/* Language Button */}
+                        <button 
+                            onClick={() => setLang(lang === 'zh' ? 'en' : 'zh')}
+                            className="bg-purple-50 text-purple-600 px-5 py-1.5 rounded-full text-sm font-bold border-2 border-purple-200 hover:bg-purple-100 transition-colors shrink-0"
+                        >
+                            {lang === 'zh' ? 'English' : '中文'}
+                        </button>
+
+                        {/* Mode Selector */}
+                        <div className="flex gap-2">
+                            {[
+                                { id: 'hour', label: t[lang].modeHour },
+                                { id: 'half', label: t[lang].modeHalf },
+                                { id: 'mixed', label: t[lang].modeMixed }
+                            ].map(m => (
+                                <button
+                                    key={m.id}
+                                    onClick={() => handleModeChange(m.id)}
+                                    className={`px-4 py-1.5 rounded-2xl font-bold text-sm transition-all ${
+                                        mode === m.id 
+                                        ? 'bg-blue-400 text-white shadow-sm' 
+                                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {m.label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Clock Display Toggle */}
+                        <label className="flex items-center gap-2 cursor-pointer text-sm font-bold text-gray-600 bg-white px-4 py-1.5 rounded-full border-2 border-gray-200 transition-colors hover:bg-gray-50 shrink-0 shadow-sm">
+                            <input 
+                                type="checkbox" 
+                                className="w-4 h-4 text-purple-600 rounded focus:ring-purple-500 accent-purple-600"
+                                checked={showNumbers}
+                                onChange={(e) => setShowNumbers(e.target.checked)}
+                            />
+                            {showNumbers ? t[lang].clockNum : t[lang].clockTick}
+                        </label>
+
+                    </div>
+
+                    {/* Second Row: Title and Streak */}
+                    <div className="relative flex justify-center items-center mb-8 h-10 w-full">
+                        {/* Header */}
+                        <h1 className="text-2xl sm:text-3xl font-black text-purple-600 drop-shadow-sm text-center m-0">
+                            {t[lang].title}
+                        </h1>
+                        
+                        {/* Streak */}
+                        <div className="absolute right-0 bg-yellow-50 text-yellow-600 px-4 py-1.5 rounded-full font-bold border-2 border-yellow-400 flex items-center gap-2 text-sm shadow-sm">
+                            <i className="fa-solid fa-star text-yellow-400"></i> {streak} {t[lang].streak}
+                        </div>
+                    </div>
+
+                    {/* Clock Component */}
+                    <AnalogClock hour={targetTime.hour} minute={targetTime.minute} showNumbers={showNumbers} />
+
+                    {/* Input Area (Dropdown Selectors) */}
+                    <div className="flex items-center justify-center gap-3 sm:gap-6 mb-8 mt-2">
+                        
+                        {/* Hour Select */}
+                        <div className="flex flex-col items-center bg-blue-50 p-3 rounded-2xl border-2 border-blue-200 w-28 sm:w-32">
+                            <select 
+                                value={inputTime.hour}
+                                onChange={(e) => setInputTime(prev => ({ ...prev, hour: e.target.value }))}
+                                disabled={isCorrect}
+                                className="text-4xl font-black text-blue-800 bg-white border-2 border-blue-300 rounded-xl w-full text-center py-2 appearance-none focus:outline-none focus:border-blue-500 shadow-sm cursor-pointer disabled:opacity-70 text-center-last"
+                                style={{ textAlignLast: 'center' }} // Ensures selected text stays centered
+                            >
+                                {Array.from({ length: 12 }, (_, i) => i + 1).map(h => (
+                                    <option key={h} value={formatNumber(h)}>{formatNumber(h)}</option>
+                                ))}
+                            </select>
+                            <div className="mt-2 text-blue-500 font-bold text-sm">{t[lang].hour}</div>
+                        </div>
+
+                        {/* Colon separator */}
+                        <div className="text-4xl font-black text-gray-400 pb-8 animate-pulse">:</div>
+
+                        {/* Minute Select */}
+                        <div className="flex flex-col items-center bg-pink-50 p-3 rounded-2xl border-2 border-pink-200 w-28 sm:w-32">
+                            <select 
+                                value={inputTime.minute}
+                                onChange={(e) => setInputTime(prev => ({ ...prev, minute: e.target.value }))}
+                                disabled={isCorrect}
+                                className="text-4xl font-black text-pink-800 bg-white border-2 border-pink-300 rounded-xl w-full text-center py-2 appearance-none focus:outline-none focus:border-pink-500 shadow-sm cursor-pointer disabled:opacity-70 text-center-last"
+                                style={{ textAlignLast: 'center' }}
+                            >
+                                <option value="00">00</option>
+                                <option value="30">30</option>
+                            </select>
+                            <div className="mt-2 text-pink-500 font-bold text-sm">{t[lang].minute}</div>
+                        </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <div className="flex flex-col gap-4">
+                        {!isCorrect ? (
+                            <button 
+                                onClick={checkAnswer}
+                                className={`w-full py-4 text-white text-xl sm:text-2xl font-black rounded-2xl btn-cute tracking-widest transition-colors ${errorMsg ? 'bg-red-400 hover:bg-red-500' : 'bg-green-400 hover:bg-green-500'}`}
+                            >
+                                {errorMsg || t[lang].checkBtn}
+                            </button>
+                        ) : (
+                            <button 
+                                onClick={handleNextQuestion}
+                                className="w-full py-4 bg-yellow-400 hover:bg-yellow-500 text-yellow-900 text-xl sm:text-2xl font-black rounded-2xl btn-cute tracking-widest flex items-center justify-center gap-2"
+                            >
+                                {isPlayingAudio ? <i className="fa-solid fa-volume-high animate-pulse"></i> : t[lang].nextBtn} 
+                                <i className="fa-solid fa-arrow-right"></i>
+                            </button>
+                        )}
+                    </div>
+
+                    {/* Reward Overlay */}
+                    {showReward && (
+                        <div className="absolute inset-0 z-50 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl cursor-pointer" onClick={handleNextQuestion}>
+                            <div className="big-heart-container flex flex-col items-center">
+                                <i className="fa-solid fa-hand text-[120px] text-yellow-500 drop-shadow-[0_0_20px_rgba(234,179,8,0.5)] mb-6"></i>
+                                <h2 className="text-4xl font-black text-yellow-500 mb-2 drop-shadow-md">{t[lang].highFive}</h2>
+                                <p className="text-xl font-bold text-gray-600 bg-white px-6 py-2 rounded-full shadow-md">{t[lang].combo}</p>
+                                <p className="text-sm text-gray-400 mt-8 animate-pulse">{t[lang].continue}</p>
+                            </div>
+                        </div>
+                    )}
+
+                </div>
+            );
+        };
+
+        // Render the app
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
